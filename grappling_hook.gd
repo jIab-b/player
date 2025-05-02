@@ -19,7 +19,7 @@ var grapple_point: Vector3 = Vector3.ZERO
 var rope_mesh: MeshInstance3D
 var rope_material: StandardMaterial3D
 var camera_node: Camera3D
-var camera_offset: Vector3 = Vector3(0, -0.3, -0.5)  # Offset for better visibility
+var camera_offset: Vector3 = Vector3(0, -0.7, -0.5)  # Offset for better visibility
 
 # Physics variables
 var current_rope_length: float = 0.0
@@ -72,6 +72,7 @@ func _shoot_grapple():
     if result:
         is_grappling = true
         grapple_point = result.position
+
         current_rope_length = start_pos.distance_to(grapple_point)
         target_rope_length = current_rope_length
         rope_velocity = 0.0
@@ -79,8 +80,20 @@ func _shoot_grapple():
         # Make rope visible
         rope_mesh.visible = true
 
+func apply_release_force():
+    var vertical_boost = 5.0
+    var pull_boost = 8.0
+   
+    #var direction = grapple_point.direction_to(get_parent().position)
+    var pull_dir = get_parent().global_position.direction_to(grapple_point)
+    
+    get_parent().velocity += pull_dir * pull_boost
+    get_parent().velocity.y += vertical_boost 
+
 func _release_grapple():
     is_grappling = false
+    
+    apply_release_force()
     rope_mesh.visible = false
 
 func _apply_spring_physics(delta):
@@ -93,7 +106,7 @@ func _apply_spring_physics(delta):
         
         # Calculate current distance to grapple point
         var current_distance = start_pos.distance_to(grapple_point)
-        
+
         # Spring physics - calculate force based on Hooke's law with damping
         var direction_to_point = (grapple_point - start_pos).normalized()
         var spring_force = direction_to_point * spring_strength * (current_distance - target_rope_length)
@@ -102,7 +115,7 @@ func _apply_spring_physics(delta):
         spring_force -= player_body.velocity * damping
         
         # Apply the force to the player
-        player_body.velocity += spring_force * delta
+        #player_body.velocity += spring_force * delta
         
         # If player is trying to retract rope
         #if Input.is_action_pressed("retract_grapple") and target_rope_length > 3.0:
