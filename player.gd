@@ -3,15 +3,16 @@ extends CharacterBody3D
 # Movement constants
 const GRAVITY: float = 20.0
 const FRICTION: float = 0.4
-const STOP_SPEED: float = 100.0
-const GROUND_ACCELERATE: float = 10.0
-const AIR_ACCELERATE: float = 0.7
+const STOP_SPEED: float = 150.0
+const GROUND_ACCELERATE: float = 30.0
+const AIR_ACCELERATE: float = 100.0
 const MAX_VELOCITY_GROUND: float = 6.0  # Maximum ground speed
 const MAX_VELOCITY_AIR: float = 1.0     # Air control amount
 const JUMP_FORCE: float = 9.0
 
 #var ground_normal: Vector3 = Vector3.UP
-
+var jump_buffer = 0
+var buffer_val = 0.2
 
 # Look variables
 var mouse_sensitivity := 0.1
@@ -57,6 +58,8 @@ func _physics_process(delta: float) -> void:
     velocity = apply_movement(delta, wish_dir)
 
     move_and_slide()
+    if jump_buffer > 0:
+        jump_buffer -= delta
 
 func process_input():
     # Calculate movement direction based on input
@@ -86,9 +89,12 @@ func apply_movement(delta, wish_dir):
         velocity.y -= GRAVITY * delta
     
     # Handle jumping
-    if on_ground and Input.is_action_just_pressed("jump"):
-        velocity.y = JUMP_FORCE
+    if (Input.is_action_pressed("jump")):
+        jump_buffer = buffer_val
+    if on_ground and jump_buffer > 0:
+        velocity.y += JUMP_FORCE
         on_ground = false
+    
     
     # Get 2D velocity (horizontal movement)
     var current_speed = Vector3(velocity.x, 0, velocity.z)

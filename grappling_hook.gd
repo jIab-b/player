@@ -1,266 +1,193 @@
-
-class_name AdaptiveRopeGrapple
 extends Node3D
 
-# Configuration
-@export var max_segments := 50
-@export var base_segment_length := 0.5
-@export var tension_threshold := 1.2
-@export var segment_mesh: Mesh
-@export var grapple_pull_strength := 15.0  # Force applied when pulling player
-@export var swing_dampening := 0.98        # Reduces swing momentum
-@export var max_grapple_speed := 30.0      # Maximum speed when grappling
+class_name Grapple
 
-# Runtime variables
-var is_grappled := false
-var segments := []
-var grapple_target: Vector3
-var previous_positions := {}
-var player_body: CharacterBody3D = null  # Reference to player body
+# Grappling hook parameters
+@export var max_distance: float = 50.0
+@export var spring_strength: float = 20.0
+@export var damping: float = 5.0
+@export var retracting_speed: float = 10.0
+@export var pull_force: float = 10.0
 
+# Visual settings
+@export var rope_thickness: float = 0.05
+@export var rope_color: Color = Color(1.0, 0.5, 0.0, 1.0)  # Bright orange
+
+# Grapple state variables
+var is_grappling: bool = false
+var grapple_point: Vector3 = Vector3.ZERO
+var rope_mesh: MeshInstance3D
+var rope_material: StandardMaterial3D
+var camera_node: Camera3D
+var camera_offset: Vector3 = Vector3(0, -0.3, -0.5)  # Offset for better visibility
+
+# Physics variables
+var current_rope_length: float = 0.0
+var target_rope_length: float = 0.0
+var rope_velocity: float = 0.0
 
 func _ready():
-    assign_segment_mesh()
-    # Get parent if it's a CharacterBody3D
-    if get_parent() is CharacterBody3D:
-        player_body = get_parent()
+    # Create rope mesh
+    rope_mesh = MeshInstance3D.new()
+    add_child(rope_mesh)
     
-func assign_segment_mesh():
-    var cylinder = CylinderMesh.new()
-    cylinder.top_radius = 0.05
-    cylinder.bottom_radius = 0.05
-    cylinder.height = 0.5
-    cylinder.radial_segments = 12
-    cylinder.rings = 1
-
-    var material = StandardMaterial3D.new()
-    material.albedo_color = Color(1.0, 0.5, 0.0) # Orange
-
-    cylinder.material = material
-    segment_mesh = cylinder
-
-
-func _input(event: InputEvent) -> void:
-    if event.is_action_pressed("grapple"):
-        shoot_grapple()
-    elif event.is_action_released("grapple"):
-        release_grapple()
-       
-func shoot_grapple():
-    var space_state = get_world_3d().direct_space_state
-    var camera = get_viewport().get_camera_3d()
-    var start = camera.global_position
-    var end = start + camera.global_transform.basis.z * -100
+    # Set up rope material
+    rope_material = StandardMaterial3D.new()
+    rope_material.albedo_color = rope_color
+    rope_material.roughness = 0.4
     
-    var query = PhysicsRayQueryParameters3D.create(start, end)
-    var result = space_state.intersect_ray(query)
-    
-    if result:
-        initialize_rope(result.position)
-        is_grappled = true
+    # Reference to camera
+    camera_node = get_parent().get_node("CameraPivot/CameraFirst")
 
-func initialize_rope(target_position: Vector3):
-    grapple_target = target_position
-    clear_segments()
-    
-    # Initial segment setup
-    var start_point = global_position
-    var direction = (grapple_target - start_point).normalized()
-    var segment_count = clamp(ceil((start_point.distance_to(grapple_target) / base_segment_length)), 1, max_segments)
-    print(segment_count)    
-    for i in segment_count:
-        var segment_pos = start_point + direction * base_segment_length * i
-        add_segment(segment_pos)
-
-func add_segment(seg_pos: Vector3):
-    var new_segment = MeshInstance3D.new()
-    new_segment.mesh = segment_mesh
-    new_segment.position = seg_pos
-    add_child(new_segment)
-    segments.append(new_segment)
-    previous_positions[new_segment] = seg_pos
-
-func clear_segments():
-    for segment in segments:
-        segment.queue_free()
-    segments.clear()
-    previous_positions.clear()
+func _process(delta):
+    # Update grapple visuals if active
+    if is_grappling:
+        _update_rope_mesh()
 
 func _physics_process(delta):
-    if !is_grappled || segments.is_empty():
-        return
+    # Check for grapple input
+    if Input.is_action_just_pressed("grapple"):
+        if !is_grappling:
+            _shoot_grapple()
+        else:
+            _release_grapple()
     
-    # Store initial position before update
-    var initial_pos = global_position
-    
-    # Verlet integration for rope physics
-    update_segment_positions(delta)
-    
-    # Update player position and velocity based on rope physics
-    update_player_movement(delta, initial_pos)
-    
-    # Adaptive subdivision logic
-    var total_length = calculate_rope_length()
-    var desired_length = segments[0].global_position.distance_to(grapple_target)
-    
-    if desired_length / total_length > tension_threshold && segments.size() < max_segments:
-        subdivide_segment()
-    elif desired_length / total_length < 1.0 / tension_threshold && segments.size() > 1:
-        merge_segments()
+    # Apply spring physics if grappling
+    if is_grappling:
+        _apply_spring_physics(delta)
 
-func update_segment_positions(delta):
-    var gravity = Vector3.DOWN * 9.8 * delta
+func _shoot_grapple():
+    # Get grapple start position (camera with offset)
+    var start_pos = camera_node.global_transform.origin + camera_node.global_transform.basis * camera_offset
     
-    # Update first segment (player connection)
-    var first_segment = segments[0]
-    var current_pos = first_segment.global_position
-    previous_positions[first_segment] = current_pos
+    # Cast ray from camera
+    var space_state = get_world_3d().direct_space_state
+    var ray_end = start_pos + camera_node.global_transform.basis.z * -max_distance
     
-    # Make first segment follow the player
-    first_segment.global_position = global_position
+    var query = PhysicsRayQueryParameters3D.create(start_pos, ray_end)
+    query.exclude = [get_parent()]
+    var result = space_state.intersect_ray(query)
     
-    # Update intermediate segments
-    for i in range(1, segments.size()):
-        var segment = segments[i]
-        current_pos = segment.global_position
-        var previous_pos = previous_positions[segment]
-        var new_pos = current_pos + (current_pos - previous_pos) * 0.99 + gravity
+    # If we hit something, attach the grapple
+    if result:
+        is_grappling = true
+        grapple_point = result.position
+        current_rope_length = start_pos.distance_to(grapple_point)
+        target_rope_length = current_rope_length
+        rope_velocity = 0.0
         
-        # Apply distance constraint
-        var parent_segment = segments[i-1]
-        var to_parent = (parent_segment.global_position - new_pos).normalized()
-        new_pos = parent_segment.global_position - to_parent * base_segment_length
-        
-        segment.global_position = new_pos
-        previous_positions[segment] = current_pos
-    
-    # Update last segment (grapple point)
-    var last_segment = segments[-1]
-    last_segment.global_position = grapple_target
+        # Make rope visible
+        rope_mesh.visible = true
 
-func update_player_movement(delta: float, initial_pos: Vector3):
-    if player_body == null:
-        return
+func _release_grapple():
+    is_grappling = false
+    rope_mesh.visible = false
+
+func _apply_spring_physics(delta):
+    var player = get_parent()
+    var player_body: CharacterBody3D = player as CharacterBody3D
+    
+    if player_body:
+        # Get current rope start position
+        var start_pos = camera_node.global_transform.origin + camera_node.global_transform.basis * camera_offset
         
-    # Calculate rope direction and length
-    var rope_vector = grapple_target - global_position
-    var rope_direction = rope_vector.normalized()
+        # Calculate current distance to grapple point
+        var current_distance = start_pos.distance_to(grapple_point)
+        
+        # Spring physics - calculate force based on Hooke's law with damping
+        var direction_to_point = (grapple_point - start_pos).normalized()
+        var spring_force = direction_to_point * spring_strength * (current_distance - target_rope_length)
+        
+        # Apply damping
+        spring_force -= player_body.velocity * damping
+        
+        # Apply the force to the player
+        player_body.velocity += spring_force * delta
+        
+        # If player is trying to retract rope
+        #if Input.is_action_pressed("retract_grapple") and target_rope_length > 3.0:
+            #target_rope_length -= retracting_speed * delta
+        #
+        ## If player is trying to extend rope
+        #if Input.is_action_pressed("extend_grapple"):
+            #target_rope_length += retracting_speed * delta
+            #target_rope_length = min(target_rope_length, max_distance)
+
+func _update_rope_mesh():
+    # Get rope start position (camera with offset)
+    var start_pos = camera_node.global_transform.origin + camera_node.global_transform.basis * camera_offset
+    
+    # Calculate rope properties
+    var rope_vector = grapple_point - start_pos
     var rope_length = rope_vector.length()
+    var rope_direction = rope_vector.normalized()
     
-    # Calculate tension force based on distance to target
-    var rest_length = base_segment_length * (segments.size() - 1)
-    var tension = 0.0
+    # Create rope mesh
+    var immediate_mesh = ImmediateMesh.new()
+    rope_mesh.mesh = immediate_mesh
+    rope_mesh.material_override = rope_material
     
-    # Only apply tension when rope is extended
-    if rope_length > rest_length:
-        tension = (rope_length - rest_length) * grapple_pull_strength
+    # Draw the rope as a simple cylinder
+    immediate_mesh.clear_surfaces()
+    immediate_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
     
-    # Calculate pull force
-    var pull_force = rope_direction * tension * delta
+    # We'll create a basic cylinder from start to end
+    var segments = 8  # Number of sides for our rope cylinder
+    var up = (rope_direction.cross(Vector3.UP).normalized() 
+              if rope_direction != Vector3.UP and rope_direction != Vector3.DOWN 
+              else rope_direction.cross(Vector3.RIGHT).normalized())
+    var right = rope_direction.cross(up).normalized()
     
-    # Add player input for swinging
-    var input_direction = Vector3.ZERO
-    if Input.is_action_pressed("move_forward"):
-        input_direction.z -= 1
-    if Input.is_action_pressed("move_back"):
-        input_direction.z += 1
-    if Input.is_action_pressed("move_left"):
-        input_direction.x -= 1
-    if Input.is_action_pressed("move_right"):
-        input_direction.x += 1
+    # Create vertices
+    var prev_vertices = []
+    var curr_vertices = []
     
-    # Convert input to world space
-    var camera = get_viewport().get_camera_3d()
-    var camera_basis = camera.global_transform.basis
-    input_direction = (camera_basis * Vector3(input_direction.x, 0, input_direction.z)).normalized()
+    for i in range(segments + 1):
+        var angle = 2 * PI * i / segments
+        var x = cos(angle) * rope_thickness
+        var y = sin(angle) * rope_thickness
+        
+        var offset = right * x + up * y
+        
+        # Store vertices for start and end of current segment
+        var vertex_start = to_local(start_pos + offset)
+        var vertex_end = to_local(grapple_point + offset)
+        
+        # For the first iteration, just store the vertices
+        if i == 0:
+            prev_vertices = [vertex_start, vertex_end]
+            continue
+            
+        # Store current vertices for potential next iteration
+        curr_vertices = [vertex_start, vertex_end]
+        
+        # Add first triangle
+        immediate_mesh.surface_set_normal(rope_direction)
+        immediate_mesh.surface_set_uv(Vector2(0, 0))
+        immediate_mesh.surface_add_vertex(prev_vertices[0])
+        
+        immediate_mesh.surface_set_normal(rope_direction)
+        immediate_mesh.surface_set_uv(Vector2(1, 0))
+        immediate_mesh.surface_add_vertex(curr_vertices[0])
+        
+        immediate_mesh.surface_set_normal(rope_direction)
+        immediate_mesh.surface_set_uv(Vector2(1, 1))
+        immediate_mesh.surface_add_vertex(curr_vertices[1])
+        
+        # Add second triangle
+        immediate_mesh.surface_set_normal(rope_direction)
+        immediate_mesh.surface_set_uv(Vector2(0, 0))
+        immediate_mesh.surface_add_vertex(prev_vertices[0])
+        
+        immediate_mesh.surface_set_normal(rope_direction)
+        immediate_mesh.surface_set_uv(Vector2(1, 1))
+        immediate_mesh.surface_add_vertex(curr_vertices[1])
+        
+        immediate_mesh.surface_set_normal(rope_direction)
+        immediate_mesh.surface_set_uv(Vector2(0, 1))
+        immediate_mesh.surface_add_vertex(prev_vertices[1])
+        
+        # Update previous vertices for next iteration
+        prev_vertices = curr_vertices
     
-    # Create swing force perpendicular to rope
-    var swing_force = Vector3.ZERO
-    if input_direction != Vector3.ZERO:
-        # Project input onto plane perpendicular to rope
-        swing_force = (input_direction - rope_direction * input_direction.dot(rope_direction))
-        swing_force = swing_force.normalized() * 5.0 * delta
-    
-    # Combine forces
-    var total_force = pull_force + swing_force
-    
-    # Update velocity
-    player_body.velocity += total_force
-    
-    # Apply dampening to smooth swinging
-    player_body.velocity *= swing_dampening
-    
-    # Clamp velocity to max speed
-    if player_body.velocity.length() > max_grapple_speed:
-        player_body.velocity = player_body.velocity.normalized() * max_grapple_speed
-    
-    # Move the player
-    player_body.move_and_slide()
-
-func subdivide_segment():
-    var new_segment_index = find_most_stretched_segment()
-    if new_segment_index == -1:
-        return
-    
-    var prev_segment = segments[new_segment_index]
-    var next_segment = segments[new_segment_index + 1]
-    var new_position = (prev_segment.global_position + next_segment.global_position) * 0.5
-    add_segment_at(new_segment_index + 1, new_position)
-
-func merge_segments():
-    var least_tension_index = find_least_tension_segment()
-    if least_tension_index == -1:
-        return
-    
-    remove_segment(least_tension_index)
-
-func calculate_rope_length() -> float:
-    var length = 0.0
-    for i in range(segments.size() - 1):
-        length += segments[i].global_position.distance_to(segments[i+1].global_position)
-    return length
-
-# Helper functions for adaptive subdivision
-func find_most_stretched_segment() -> int:
-    var max_stretch = 0.0
-    var max_index = -1
-    
-    for i in range(segments.size() - 1):
-        var stretch = segments[i].global_position.distance_to(segments[i+1].global_position)
-        if stretch > base_segment_length * tension_threshold && stretch > max_stretch:
-            max_stretch = stretch
-            max_index = i
-    
-    return max_index
-
-func find_least_tension_segment() -> int:
-    var min_tension = INF
-    var min_index = -1
-    
-    for i in range(segments.size() - 1):
-        var tension = segments[i].global_position.distance_to(segments[i+1].global_position)
-        if tension < base_segment_length / tension_threshold && tension < min_tension:
-            min_tension = tension
-            min_index = i
-    
-    return min_index
-
-func release_grapple():
-    is_grappled = false
-    clear_segments()
-    
-func add_segment_at(index: int, seg_pos: Vector3):
-    var new_segment = MeshInstance3D.new()
-    new_segment.mesh = segment_mesh
-    new_segment.position = seg_pos
-    add_child(new_segment)
-    segments.insert(index, new_segment)
-    previous_positions[new_segment] = seg_pos
-
-func remove_segment(index: int):
-    if index < 0 or index >= segments.size():
-        return
-    var segment = segments[index]
-    segment.queue_free()
-    previous_positions.erase(segment)
-    segments.remove_at(index)
+    immediate_mesh.surface_end()
