@@ -1,10 +1,19 @@
-[gd_scene load_steps=4 format=3 uid="uid://b4qfirbyjl6ya"]
+[gd_scene load_steps=7 format=3 uid="uid://b4qfirbyjl6ya"]
 
 [ext_resource type="Script" uid="uid://jwkrcj7wwul6" path="res://player.gd" id="1_4flbx"]
+[ext_resource type="Script" uid="uid://bll525a6x3j2b" path="res://grappling_hook.gd" id="2_onrkg"]
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_4flbx"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_onrkg"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_onrkg"]
+albedo_color = Color(0, 0, 1, 1)
+
+[sub_resource type="SphereMesh" id="SphereMesh_i3pqv"]
+material = SubResource("StandardMaterial3D_onrkg")
+radius = 0.1
+height = 0.1
 
 [node name="player" type="CharacterBody3D"]
 script = ExtResource("1_4flbx")
@@ -23,3 +32,11 @@ shape = SubResource("CapsuleShape3D_onrkg")
 
 [node name="CameraThird" type="Camera3D" parent="CameraPivot"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0177162, 1.67785, 4.56455)
+
+[node name="GrapplingHook" type="Node3D" parent="."]
+script = ExtResource("2_onrkg")
+
+[node name="weapon" type="Node3D" parent="."]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="weapon"]
+mesh = SubResource("SphereMesh_i3pqv")

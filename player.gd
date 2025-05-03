@@ -25,6 +25,7 @@ var pitch_max := 89.0
 var is_first_person := true
 
 # References
+@onready var weapon = $weapon
 @onready var pivot: Node3D = $CameraPivot
 @onready var camera_fp: Camera3D = $CameraPivot/CameraFirst
 @onready var camera_tp: Camera3D = $CameraPivot/CameraThird
@@ -48,12 +49,26 @@ func _input(event):
         print('switching camera')
         set_camera_mode(!is_first_person)
 
+func apply_weapon_offset():
+    var forward_direction = global_position
+    if is_first_person:
+        forward_direction = camera_fp.transform.basis.z
+    else:
+        forward_direction = camera_tp.transform.basis.z
+        
+    forward_direction.y = 0
+    forward_direction = forward_direction.normalized()
+    var offset_pos = forward_direction
+    offset_pos.y = weapon.position.y
+    weapon.position = -offset_pos
+    
+
 func _physics_process(delta: float) -> void:
     
     var wish_dir = Vector3.ZERO
     wish_dir = process_input()
 
-    
+    apply_weapon_offset()
 
     velocity = apply_movement(delta, wish_dir)
 
