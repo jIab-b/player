@@ -1,7 +1,8 @@
-[gd_scene load_steps=7 format=3 uid="uid://b4qfirbyjl6ya"]
+[gd_scene load_steps=8 format=3 uid="uid://b4qfirbyjl6ya"]
 
 [ext_resource type="Script" uid="uid://jwkrcj7wwul6" path="res://player.gd" id="1_4flbx"]
 [ext_resource type="Script" uid="uid://bll525a6x3j2b" path="res://grappling_hook.gd" id="2_onrkg"]
+[ext_resource type="Script" uid="uid://bivcx0t4b5xh6" path="res://launcher.gd" id="3_i3pqv"]
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_4flbx"]
 
@@ -12,14 +13,13 @@ albedo_color = Color(0, 0, 1, 1)
 
 [sub_resource type="SphereMesh" id="SphereMesh_i3pqv"]
 material = SubResource("StandardMaterial3D_onrkg")
-radius = 0.1
+radius = 0.05
 height = 0.1
 
 [node name="player" type="CharacterBody3D"]
 script = ExtResource("1_4flbx")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.252256, -0.00935149)
 mesh = SubResource("CapsuleMesh_4flbx")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
@@ -40,3 +40,6 @@ script = ExtResource("2_onrkg")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="weapon"]
 mesh = SubResource("SphereMesh_i3pqv")
+
+[node name="launcher" type="Node3D" parent="weapon"]
+script = ExtResource("3_i3pqv")

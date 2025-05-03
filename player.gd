@@ -14,7 +14,11 @@ const JUMP_FORCE: float = 9.0
 var jump_buffer = 0
 var buffer_val = 0.2
 
+
+
 # Look variables
+var camera_dir
+var camera_dir_global
 var mouse_sensitivity := 0.1
 var yaw := 0.0
 var pitch := 0.0
@@ -50,12 +54,8 @@ func _input(event):
         set_camera_mode(!is_first_person)
 
 func apply_weapon_offset():
-    var forward_direction = global_position
-    if is_first_person:
-        forward_direction = camera_fp.transform.basis.z
-    else:
-        forward_direction = camera_tp.transform.basis.z
-        
+
+    var forward_direction = camera_dir
     forward_direction.y = 0
     forward_direction = forward_direction.normalized()
     var offset_pos = forward_direction
@@ -63,15 +63,22 @@ func apply_weapon_offset():
     weapon.position = -offset_pos
     
 
+func set_camera_dir():
+    if is_first_person:
+        camera_dir = camera_fp.transform.basis.z
+        camera_dir_global = camera_fp.global_transform.basis.z
+    else:
+        camera_dir = camera_tp.transform.basis.z
+        camera_dir_global = camera_tp.global_transform.basis.z
 func _physics_process(delta: float) -> void:
     
     var wish_dir = Vector3.ZERO
     wish_dir = process_input()
 
+    set_camera_dir()
     apply_weapon_offset()
 
     velocity = apply_movement(delta, wish_dir)
-
     move_and_slide()
     if jump_buffer > 0:
         jump_buffer -= delta
