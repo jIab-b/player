@@ -1,0 +1,24 @@
+[gd_scene load_steps=5 format=3 uid="uid://uc60t8gvfy78"]
+
+[ext_resource type="Script" uid="uid://bx7injc4e5mu5" path="res://Rocket.gd" id="1_fj03e"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_fj03e"]
+radius = 0.0529155
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_r2l15"]
+albedo_color = Color(1, 0, 0, 1)
+
+[sub_resource type="SphereMesh" id="SphereMesh_tpb7v"]
+material = SubResource("StandardMaterial3D_r2l15")
+
+[node name="Rocket" type="Node3D"]
+script = ExtResource("1_fj03e")
+
+[node name="Area3D" type="Area3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Area3D"]
+shape = SubResource("SphereShape3D_fj03e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.3, 0, 0, 0, 0.3, 0, 0, 0, 0.3, 0, 0, 0)
+mesh = SubResource("SphereMesh_tpb7v")
