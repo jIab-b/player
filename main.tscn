@@ -1,0 +1,68 @@
+[gd_scene load_steps=7 format=3 uid="uid://dyo483l82rjbb"]
+
+[ext_resource type="Script" uid="uid://g8n7m4ie5k1t" path="res://main.gd" id="1_h2yge"]
+[ext_resource type="PackedScene" uid="uid://b4qfirbyjl6ya" path="res://player.tscn" id="1_ig7tw"]
+[ext_resource type="PackedScene" uid="uid://cqxdytv0kqf7m" path="res://enemy.tscn" id="2_0xm2m"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_a202f"]
+sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+ground_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+
+[sub_resource type="Sky" id="Sky_noarx"]
+sky_material = SubResource("ProceduralSkyMaterial_a202f")
+
+[sub_resource type="Environment" id="Environment_a0tk4"]
+background_mode = 2
+sky = SubResource("Sky_noarx")
+tonemap_mode = 2
+glow_enabled = true
+
+[node name="Node3D" type="Node3D"]
+script = ExtResource("1_h2yge")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, 0.75, -0.433013, 0, 0, 0)
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_a0tk4")
+
+[node name="CSGBox3D" type="CSGBox3D" parent="."]
+use_collision = true
+size = Vector3(70.902, 0.207, 70)
+
+[node name="CSGBox3D5" type="CSGBox3D" parent="CSGBox3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.72944, 1.71068, -17.1872)
+size = Vector3(1, 3.34949, 1.62646)
+
+[node name="CSGBox3D4" type="CSGBox3D" parent="CSGBox3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.9722, 2.52785, 16.7781)
+size = Vector3(1, 4.90088, 1.47119)
+
+[node name="CSGBox3D2" type="CSGBox3D" parent="CSGBox3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.1697, 1.24805, -6.45807)
+size = Vector3(1.87448, 1.96533, 5.20361)
+
+[node name="CSGBox3D3" type="CSGBox3D" parent="CSGBox3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.4647, 1.88925, -2.01004)
+size = Vector3(2.40429, 4.51074, 5.08673)
+
+[node name="CSGBox3D" type="CSGBox3D" parent="CSGBox3D"]
+transform = Transform3D(0.975281, 0.22097, 0, -0.22097, 0.975281, 0, 0, 0, 1, 2.55816, 2.11617, -9.49936)
+size = Vector3(1, 7.10987, 2.86865)
+
+[node name="player" parent="CSGBox3D" instance=ExtResource("1_ig7tw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.68366, 1.56877, 0.889493)
+
+[node name="Node3D" type="Node3D" parent="CSGBox3D"]
+
+[node name="CSGBox3D7" type="CSGBox3D" parent="CSGBox3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.54271, 14.5077, 0.466967)
+size = Vector3(3.98364, 7.0127, 4.27094)
+
+[node name="CSGBox3D6" type="CSGBox3D" parent="CSGBox3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.92273, 9.97544, -17.4895)
+size = Vector3(9.06982, 3.23541, 8.38392)
+
+[node name="enemy" parent="." instance=ExtResource("2_0xm2m")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.218834, 1.52113, 0.752702)
