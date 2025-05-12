@@ -35,11 +35,11 @@ func spawn_enemy() -> void:
     # Randomly choose whether to spawn up or down (along Z axis)
     var direction = 1 if randf() > 0.5 else -1
     
+    # Add enemy to the current scene first
+    add_child(enemy_instance)
+    
     # Set spawn position
     # X = 0 (origin), Y = vertical_offset, Z = random_distance * direction
     enemy_instance.global_position = Vector3(0, vertical_offset, random_distance * direction)
-    
-    # Add enemy to the scene
-    get_tree().get_root().add_child(enemy_instance)
     
     print("Spawned enemy at position: ", enemy_instance.global_position)
