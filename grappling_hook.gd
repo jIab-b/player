@@ -20,6 +20,8 @@ var rope_mesh: MeshInstance3D
 var rope_material: StandardMaterial3D
 var camera_node: Camera3D
 var camera_offset: Vector3 = Vector3(0, -0.7, -0.5)  # Offset for better visibility
+var enemy_attached
+
 
 # Physics variables
 var current_rope_length: float = 0.0
@@ -39,13 +41,16 @@ func _ready():
     # Reference to camera
     camera_node = get_parent().get_node("CameraPivot/CameraFirst")
 
-func _process(delta):
+func _process(_delta):
     # Update grapple visuals if active
     if is_grappling:
         _update_rope_mesh()
 
 func _physics_process(delta):
     # Check for grapple input
+    if enemy_attached != null:
+        grapple_point = enemy_attached.position
+
     if Input.is_action_just_pressed("grapple"):
         if !is_grappling:
             _shoot_grapple()
@@ -70,6 +75,12 @@ func _shoot_grapple():
     
     # If we hit something, attach the grapple
     if result:
+        
+        # Check if the object is an enemy
+        if result.collider.is_in_group("enemy"):
+            print('enemy grappled')
+            enemy_attached = result.collider
+        
         is_grappling = true
         grapple_point = result.position
 
@@ -90,29 +101,48 @@ func apply_release_force():
     get_parent().velocity += pull_dir * pull_boost
     get_parent().velocity.y += vertical_boost 
 
+func get_boost_dir() -> Vector3:
+    # Create the orthogonal plane
+    var normal = (grapple_point - Global.player_pos).normalized()
+    var d = -normal.dot(enemy_attached.global_position)
+    var orthogonal_boost_plane = Plane(normal, d)
+    
+    # Find where the camera ray intersects this plane
+    var intersection_point = get_camera_plane_intersection(orthogonal_boost_plane)
+    
+    # Calculate direction from enemy to intersection point
+    var boost_dir = (intersection_point - enemy_attached.global_position).normalized()
+    
+    return boost_dir
+
 func _release_grapple():
+
     is_grappling = false
+    if enemy_attached:
+        
+        enemy_attached.velocity += get_boost_dir() * 20.0 
+        enemy_attached = null
+
     
     apply_release_force()
     rope_mesh.visible = false
 
-func _apply_spring_physics(delta):
+func _apply_spring_physics(_delta):
     var player = get_parent()
     var player_body: CharacterBody3D = player as CharacterBody3D
     
     if player_body:
         # Get current rope start position
         var start_pos = camera_node.global_transform.origin + camera_node.global_transform.basis * camera_offset
-        
         # Calculate current distance to grapple point
         var current_distance = start_pos.distance_to(grapple_point)
 
         # Spring physics - calculate force based on Hooke's law with damping
         var direction_to_point = (grapple_point - start_pos).normalized()
-        var spring_force = direction_to_point * spring_strength * (current_distance - target_rope_length)
+        var _spring_force = direction_to_point * spring_strength * (current_distance - target_rope_length)
         
         # Apply damping
-        spring_force -= player_body.velocity * damping
+        _spring_force -= player_body.velocity * damping
         
         # Apply the force to the player
         #player_body.velocity += spring_force * delta
@@ -126,13 +156,47 @@ func _apply_spring_physics(delta):
             #target_rope_length += retracting_speed * delta
             #target_rope_length = min(target_rope_length, max_distance)
 
+
+# Function to find where camera ray intersects with an orthogonal plane
+func get_camera_plane_intersection(orthogonal_plane: Plane) -> Vector3:
+    # Get camera position and direction
+    var camera_pos = camera_node.global_transform.origin
+    var camera_dir = -camera_node.global_transform.basis.z.normalized()
+    
+    # Calculate the intersection parameter t
+    # For a ray: p(t) = camera_pos + t * camera_dir
+    # For a plane: normal·p + d = 0
+    # Solving for t: t = -(normal·camera_pos + d) / (normal·camera_dir)
+    
+    var denominator = orthogonal_plane.normal.dot(camera_dir)
+    
+    # Check if ray is parallel to plane (or nearly so)
+    if abs(denominator) < 0.0001:
+        # Ray is parallel to plane, no intersection or infinite intersections
+        return Vector3.ZERO  # Or handle this case differently
+    
+    # Calculate t
+    var t = -(orthogonal_plane.normal.dot(camera_pos) + orthogonal_plane.d) / denominator
+    
+    # If t is negative, the intersection is behind the camera
+    if t < 0:
+        # You might want to handle this case differently
+        return camera_pos  # Return camera position or some other fallback
+    
+    # Calculate the intersection point
+    var intersection_point = camera_pos + camera_dir * t
+    
+    return intersection_point
+
+
+
 func _update_rope_mesh():
     # Get rope start position (camera with offset)
     var start_pos = camera_node.global_transform.origin + camera_node.global_transform.basis * camera_offset
     
     # Calculate rope properties
     var rope_vector = grapple_point - start_pos
-    var rope_length = rope_vector.length()
+    var _rope_length = rope_vector.length()
     var rope_direction = rope_vector.normalized()
     
     # Create rope mesh
