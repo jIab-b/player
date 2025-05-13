@@ -8,6 +8,7 @@ class_name Grapple
 @export var damping: float = 5.0
 @export var retracting_speed: float = 10.0
 @export var pull_force: float = 10.0
+@export var tilt_sensitivity: float = 0.1  # Sensitivity for plane tilting
 
 # Visual settings
 @export var rope_thickness: float = 0.05
@@ -33,6 +34,11 @@ var current_rope_length: float = 0.0
 var target_rope_length: float = 0.0
 var rope_velocity: float = 0.0
 
+# Plane tilting variables
+var plane_tilt_x: float = 0.0
+var plane_tilt_y: float = 0.0
+var last_mouse_position: Vector2 = Vector2.ZERO
+
 func _ready():
     # Create rope mesh
     rope_mesh = MeshInstance3D.new()
@@ -57,6 +63,9 @@ func _ready():
     
     # Reference to camera
     camera_node = get_parent().get_node("CameraPivot/CameraFirst")
+    
+    # Initialize mouse position for tilt tracking
+    last_mouse_position = get_viewport().get_mouse_position()
 
 func _process(_delta):
     # Update grapple visuals if active
@@ -65,10 +74,12 @@ func _process(_delta):
     
     # Update boost direction ray if enemy is attached
     if enemy_attached != null:
+        # Handle plane tilting with shift + mouse movement
+        if Input.is_action_pressed("clutch"):
+            _handle_plane_tilt()
+        
         var boost_dir = get_boost_dir()
         _update_boost_ray_mesh(enemy_attached.global_position, boost_dir)
-        # Debug print to verify ray is being updated
-        print("Boost ray updated: Position=", enemy_attached.global_position, " Direction=", boost_dir)
     else:
         boost_ray_mesh.visible = false
 
@@ -128,10 +139,15 @@ func apply_release_force():
     get_parent().velocity.y += vertical_boost 
 
 func get_boost_dir() -> Vector3:
-    # Create the orthogonal plane
-    var normal = (grapple_point - Global.player_pos).normalized()
-    var d = -normal.dot(enemy_attached.global_position)
-    var orthogonal_boost_plane = Plane(normal, d)
+    # Get the base normal vector (from player to grapple point)
+    var base_normal = (grapple_point - Global.player_pos).normalized()
+    
+    # Apply tilt to the normal vector
+    var tilted_normal = _apply_tilt_to_normal(base_normal)
+    
+    # Create the tilted orthogonal plane
+    var d = -tilted_normal.dot(enemy_attached.global_position)
+    var orthogonal_boost_plane = Plane(tilted_normal, d)
     
     # Find where the camera ray intersects this plane
     var intersection_point = get_camera_plane_intersection(orthogonal_boost_plane)
@@ -141,15 +157,56 @@ func get_boost_dir() -> Vector3:
     
     return boost_dir
 
-func _release_grapple():
+# Function to apply tilt to a normal vector
+func _apply_tilt_to_normal(normal: Vector3) -> Vector3:
+    # If no tilt, return the original normal
+    if plane_tilt_x == 0.0 and plane_tilt_y == 0.0:
+        return normal
+    
+    # Get camera basis vectors to determine tilt directions
+    var camera_forward = -camera_node.global_transform.basis.z.normalized()
+    var camera_right = camera_node.global_transform.basis.x.normalized()
+    var camera_up = camera_node.global_transform.basis.y.normalized()
+    
+    # Create rotation quaternions for X and Y tilts
+    var quat_x = Quaternion(camera_right, plane_tilt_y)  # Y mouse movement tilts around X axis
+    var quat_y = Quaternion(camera_up, -plane_tilt_x)    # X mouse movement tilts around Y axis
+    
+    # Apply rotations to the normal vector
+    var tilted_normal = normal
+    tilted_normal = quat_x * tilted_normal
+    tilted_normal = quat_y * tilted_normal
+    
+    return tilted_normal.normalized()
 
+func _handle_plane_tilt():
+    # Get current mouse position
+    var current_mouse_position = get_viewport().get_mouse_position()
+    
+    # Calculate mouse movement delta
+    var mouse_delta = current_mouse_position - last_mouse_position
+    
+    # Update tilt values based on mouse movement
+    plane_tilt_x += mouse_delta.x * tilt_sensitivity
+    plane_tilt_y += mouse_delta.y * tilt_sensitivity
+    
+    # Limit tilt to reasonable values
+    plane_tilt_x = clamp(plane_tilt_x, -PI/3, PI/3)  # Limit to ±60 degrees
+    plane_tilt_y = clamp(plane_tilt_y, -PI/3, PI/3)  # Limit to ±60 degrees
+    
+    # Update last mouse position
+    last_mouse_position = current_mouse_position
+
+func _release_grapple():
     is_grappling = false
     if enemy_attached:
-        
         enemy_attached.velocity += get_boost_dir() * 20.0 
         enemy_attached = null
         boost_ray_mesh.visible = false
-
+        
+        # Reset tilt when releasing grapple
+        plane_tilt_x = 0.0
+        plane_tilt_y = 0.0
     
     apply_release_force()
     rope_mesh.visible = false
