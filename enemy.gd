@@ -14,6 +14,10 @@ extends CharacterBody3D
 @export var path_recalculation_interval: float = 0.2  # How often to update path
 @export var is_active: bool = true  # Can be used to pause/resume enemy
 
+# Health and damage parameters
+@export var max_health: float = 500.0
+var current_health: float = max_health
+
 # Navigation
 var _path_finding_timer: float = 0.0
 var _target_position: Vector3
@@ -45,7 +49,7 @@ func _physics_process(delta: float) -> void:
     var distance_to_player = global_position.distance_to(player_pos)
     
     # Handle movement
-    if distance_to_player > dist_limit:
+    if distance_to_player > dist_limit and is_on_floor():
         # Create horizontal direction (ignore y component for movement)
         var horizontal_direction = Vector3(direction.x, 0, direction.z).normalized()
         
@@ -80,10 +84,18 @@ func _physics_process(delta: float) -> void:
 func _update_target_position() -> void:
     _target_position = Global.player_pos
     
-# Optional functions for handling damage, state changes, etc.
+# Handle damage and health
 func take_damage(amount: float) -> void:
-    # Implementation depends on your game mechanics
-    pass
+    current_health -= amount
+    print("Enemy took ", amount, " damage. Health: ", current_health)
+    
+    if current_health <= 0:
+        die()
+
+func die() -> void:
+    # Handle enemy death
+    print("Enemy died")
+    queue_free()
 
 func set_active(active: bool) -> void:
     is_active = active
