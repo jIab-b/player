@@ -12,12 +12,17 @@ class_name Grapple
 # Visual settings
 @export var rope_thickness: float = 0.05
 @export var rope_color: Color = Color(1.0, 0.5, 0.0, 1.0)  # Bright orange
+@export var boost_ray_color: Color = Color(1.0, 0.0, 0.0, 1.0)  # Red color for boost direction ray
+@export var boost_ray_length: float = 20.0  # Length of the boost direction ray
+@export var boost_ray_thickness: float = 0.1  # Thickness of the boost direction ray
 
 # Grapple state variables
 var is_grappling: bool = false
 var grapple_point: Vector3 = Vector3.ZERO
 var rope_mesh: MeshInstance3D
 var rope_material: StandardMaterial3D
+var boost_ray_mesh: MeshInstance3D  # Mesh for visualizing boost direction
+var boost_ray_material: StandardMaterial3D
 var camera_node: Camera3D
 var camera_offset: Vector3 = Vector3(0, -0.7, -0.5)  # Offset for better visibility
 var enemy_attached
@@ -38,6 +43,18 @@ func _ready():
     rope_material.albedo_color = rope_color
     rope_material.roughness = 0.4
     
+    # Create boost ray mesh
+    boost_ray_mesh = MeshInstance3D.new()
+    add_child(boost_ray_mesh)
+    boost_ray_mesh.visible = false
+    
+    # Set up boost ray material
+    boost_ray_material = StandardMaterial3D.new()
+    boost_ray_material.albedo_color = boost_ray_color
+    boost_ray_material.emission_enabled = true  # Make it glow
+    boost_ray_material.emission = boost_ray_color
+    boost_ray_material.emission_energy_multiplier = 2.0
+    
     # Reference to camera
     camera_node = get_parent().get_node("CameraPivot/CameraFirst")
 
@@ -45,6 +62,15 @@ func _process(_delta):
     # Update grapple visuals if active
     if is_grappling:
         _update_rope_mesh()
+    
+    # Update boost direction ray if enemy is attached
+    if enemy_attached != null:
+        var boost_dir = get_boost_dir()
+        _update_boost_ray_mesh(enemy_attached.global_position, boost_dir)
+        # Debug print to verify ray is being updated
+        print("Boost ray updated: Position=", enemy_attached.global_position, " Direction=", boost_dir)
+    else:
+        boost_ray_mesh.visible = false
 
 func _physics_process(delta):
     # Check for grapple input
@@ -78,7 +104,7 @@ func _shoot_grapple():
         
         # Check if the object is an enemy
         if result.collider.is_in_group("enemy"):
-            print('enemy grappled')
+
             enemy_attached = result.collider
         
         is_grappling = true
@@ -122,6 +148,7 @@ func _release_grapple():
         
         enemy_attached.velocity += get_boost_dir() * 20.0 
         enemy_attached = null
+        boost_ray_mesh.visible = false
 
     
     apply_release_force()
@@ -189,6 +216,82 @@ func get_camera_plane_intersection(orthogonal_plane: Plane) -> Vector3:
     return intersection_point
 
 
+
+# Function to update the boost ray mesh
+func _update_boost_ray_mesh(start_pos: Vector3, direction: Vector3):
+    # Create a cylinder mesh pointing in the boost direction
+    var immediate_mesh = ImmediateMesh.new()
+    boost_ray_mesh.mesh = immediate_mesh
+    boost_ray_mesh.material_override = boost_ray_material
+    boost_ray_mesh.visible = true
+    
+    # Calculate end position
+    var end_pos = start_pos + direction * boost_ray_length
+    
+    # Draw the ray as a simple cylinder
+    immediate_mesh.clear_surfaces()
+    immediate_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+    
+    # We'll create a basic cylinder from start to end
+    var segments = 8  # Number of sides for our ray cylinder
+    var up = (direction.cross(Vector3.UP).normalized() 
+              if direction != Vector3.UP and direction != Vector3.DOWN 
+              else direction.cross(Vector3.RIGHT).normalized())
+    var right = direction.cross(up).normalized()
+    
+    # Create vertices
+    var prev_vertices = []
+    var curr_vertices = []
+    
+    for i in range(segments + 1):
+        var angle = 2 * PI * i / segments
+        var x = cos(angle) * boost_ray_thickness
+        var y = sin(angle) * boost_ray_thickness
+        
+        var offset = right * x + up * y
+        
+        # Store vertices for start and end of current segment
+        var vertex_start = to_local(start_pos + offset)
+        var vertex_end = to_local(end_pos + offset)
+        
+        # For the first iteration, just store the vertices
+        if i == 0:
+            prev_vertices = [vertex_start, vertex_end]
+            continue
+            
+        # Store current vertices for potential next iteration
+        curr_vertices = [vertex_start, vertex_end]
+        
+        # Add first triangle
+        immediate_mesh.surface_set_normal(direction)
+        immediate_mesh.surface_set_uv(Vector2(0, 0))
+        immediate_mesh.surface_add_vertex(prev_vertices[0])
+        
+        immediate_mesh.surface_set_normal(direction)
+        immediate_mesh.surface_set_uv(Vector2(1, 0))
+        immediate_mesh.surface_add_vertex(curr_vertices[0])
+        
+        immediate_mesh.surface_set_normal(direction)
+        immediate_mesh.surface_set_uv(Vector2(1, 1))
+        immediate_mesh.surface_add_vertex(curr_vertices[1])
+        
+        # Add second triangle
+        immediate_mesh.surface_set_normal(direction)
+        immediate_mesh.surface_set_uv(Vector2(0, 0))
+        immediate_mesh.surface_add_vertex(prev_vertices[0])
+        
+        immediate_mesh.surface_set_normal(direction)
+        immediate_mesh.surface_set_uv(Vector2(1, 1))
+        immediate_mesh.surface_add_vertex(curr_vertices[1])
+        
+        immediate_mesh.surface_set_normal(direction)
+        immediate_mesh.surface_set_uv(Vector2(0, 1))
+        immediate_mesh.surface_add_vertex(prev_vertices[1])
+        
+        # Update previous vertices for next iteration
+        prev_vertices = curr_vertices
+    
+    immediate_mesh.surface_end()
 
 func _update_rope_mesh():
     # Get rope start position (camera with offset)
